@@ -5,11 +5,22 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 
 export default function SignUpPage() {
   const router = useRouter()
+
+  if (!isSupabaseConfigured()) {
+    return (
+      <AuthShell title="Setup required">
+        <div className="space-y-3 text-sm text-text-secondary">
+          <p>Supabase credentials are missing. Visit <Link href="/sign-in" className="text-accent hover:underline">sign in</Link> for setup instructions.</p>
+        </div>
+      </AuthShell>
+    )
+  }
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
