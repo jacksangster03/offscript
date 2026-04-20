@@ -1,7 +1,20 @@
 import { redirect } from 'next/navigation'
 import { AppNav } from '@/components/dashboard/AppNav'
 
+const DEMO_USER = { id: 'demo', email: 'demo@offscript.app' }
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+  if (demoMode) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <AppNav userId={DEMO_USER.id} email={DEMO_USER.email} />
+        <main className="flex-1 pt-14">{children}</main>
+      </div>
+    )
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -18,9 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex flex-col">
       <AppNav userId={user.id} email={user.email ?? ''} />
-      <main className="flex-1 pt-14">
-        {children}
-      </main>
+      <main className="flex-1 pt-14">{children}</main>
     </div>
   )
 }

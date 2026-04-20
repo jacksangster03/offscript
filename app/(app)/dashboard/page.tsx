@@ -10,6 +10,10 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    return <DashboardShell firstName="Demo" streakCount={0} recentAttempts={[]} trendData={[]} profile={null} />
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/sign-in')
@@ -47,7 +51,6 @@ export default async function DashboardPage() {
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there'
   const streakCount = profile?.streak_count ?? 0
-  const recentFeedback = recentAttempts?.[0]?.feedback as { freeze_resilience_score?: number; strength_text?: string; priority_fix_text?: string } | null
 
   const avgFRS = trendData?.length
     ? Math.round(trendData.reduce((sum, a) => {
@@ -55,6 +58,19 @@ export default async function DashboardPage() {
         return sum + (fb?.freeze_resilience_score ?? 0)
       }, 0) / trendData.length)
     : null
+
+  return <DashboardShell firstName={firstName} streakCount={streakCount} recentAttempts={recentAttempts ?? []} trendData={trendData ?? []} profile={profile} avgFRS={avgFRS} />
+}
+
+function DashboardShell({ firstName, streakCount, recentAttempts, trendData, profile, avgFRS }: {
+  firstName: string
+  streakCount: number
+  recentAttempts: unknown[]
+  trendData: unknown[]
+  profile: { preferred_mode?: string } | null
+  avgFRS?: number | null
+}) {
+  const recentFeedback = (recentAttempts[0] as { feedback?: { freeze_resilience_score?: number; strength_text?: string; priority_fix_text?: string } } | undefined)?.feedback ?? null
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 space-y-10">
@@ -168,14 +184,14 @@ export default async function DashboardPage() {
             <Link href="/progress" className="text-xs text-accent hover:underline">View all</Link>
           </div>
           <div className="space-y-3">
-            {recentAttempts.map((attempt) => {
-              const session = attempt.sessions as { mode?: string; prompts?: { topic?: string; category?: string; difficulty?: number } } | null
-              const fb = attempt.feedback as { freeze_resilience_score?: number } | null
-              const m = attempt.metrics as { words_per_minute?: number; longest_pause_ms?: number } | null
+            {(recentAttempts as Array<Record<string, unknown>>).map((attempt) => {
+              const session = attempt['sessions'] as { mode?: string; prompts?: { topic?: string; category?: string; difficulty?: number } } | null
+              const fb = attempt['feedback'] as { freeze_resilience_score?: number } | null
+              const m = attempt['metrics'] as { words_per_minute?: number; longest_pause_ms?: number } | null
               return (
                 <Link
-                  key={attempt.id}
-                  href={`/results/${attempt.id}`}
+                  key={attempt['id'] as string}
+                  href={`/results/${attempt['id']}`}
                   className="block"
                 >
                   <Card className="p-4 hover:border-border-default transition-all cursor-pointer">
@@ -197,7 +213,7 @@ export default async function DashboardPage() {
                             </span>
                           )}
                           <span className="text-xs text-text-disabled">
-                            {new Date(attempt.created_at).toLocaleDateString()}
+                            {new Date(attempt['created_at'] as string).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
