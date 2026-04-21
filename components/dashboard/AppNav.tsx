@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { isSupabaseConfigured, createClient } from '@/lib/supabase/client'
 import { cn } from '@/components/ui/cn'
 
 interface AppNavProps {
@@ -19,10 +19,12 @@ const navItems = [
 export function AppNav({ email }: AppNavProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
 
   async function signOut() {
-    await supabase.auth.signOut()
+    if (isSupabaseConfigured()) {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+    }
     router.push('/')
     router.refresh()
   }
@@ -62,7 +64,7 @@ export function AppNav({ email }: AppNavProps) {
             onClick={signOut}
             className="text-xs text-text-muted hover:text-text-secondary transition-colors px-2 py-1"
           >
-            Sign out
+            {email === 'demo@offscript.app' ? 'Exit demo' : 'Sign out'}
           </button>
         </div>
       </div>

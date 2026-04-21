@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import type { DrillMode, Difficulty } from '@/types'
@@ -14,7 +14,6 @@ interface SettingsFormProps {
 }
 
 export function SettingsForm({ userId, displayName, preferredMode, preferredDifficulty }: SettingsFormProps) {
-  const supabase = createClient()
   const [name, setName] = useState(displayName)
   const [mode, setMode] = useState<DrillMode>(preferredMode)
   const [difficulty, setDifficulty] = useState<Difficulty>(preferredDifficulty)
@@ -23,12 +22,15 @@ export function SettingsForm({ userId, displayName, preferredMode, preferredDiff
 
   async function save() {
     setSaving(true)
-    await supabase.from('profiles').upsert({
-      id: userId,
-      display_name: name,
-      preferred_mode: mode,
-      preferred_difficulty: difficulty,
-    })
+    if (isSupabaseConfigured()) {
+      const supabase = createClient()
+      await supabase.from('profiles').upsert({
+        id: userId,
+        display_name: name,
+        preferred_mode: mode,
+        preferred_difficulty: difficulty,
+      })
+    }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)

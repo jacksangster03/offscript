@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { DrillSession } from '@/components/drill/DrillSession'
 import { PromptCard } from '@/components/drill/PromptCard'
 import type { Prompt, DrillMode, Session } from '@/types'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 
 function DrillPageContent() {
   const router = useRouter()
@@ -24,14 +24,18 @@ function DrillPageContent() {
       setError(null)
 
       try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { router.push('/sign-in'); return }
+        // Skip auth check in demo mode
+        if (isSupabaseConfigured()) {
+          const supabase = createClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) { router.push('/sign-in'); return }
+        }
 
         let fetchedPrompt: Prompt
 
-        if (retrySessionId) {
+        if (retrySessionId && isSupabaseConfigured()) {
           // Retry: fetch the same prompt from the original session
+          const supabase = createClient()
           const { data: originalSession } = await supabase
             .from('sessions')
             .select('*, prompts(*)')
@@ -41,7 +45,7 @@ function DrillPageContent() {
           if (!originalSession?.prompts) throw new Error('Original session not found')
           fetchedPrompt = originalSession.prompts as Prompt
         } else {
-          // Fetch a random prompt
+          // Fetch a random prompt via API
           const res = await fetch(`/api/prompts?mode=${mode}`)
           if (!res.ok) throw new Error('Failed to load prompt')
           fetchedPrompt = await res.json()
