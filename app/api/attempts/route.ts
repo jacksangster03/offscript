@@ -7,6 +7,8 @@ import {
   computeMetricsFromTranscript,
   computeFreezeResilienceScore,
 } from '@/lib/metrics/compute'
+import { detectSpeechDisfluencyEvents } from '@/lib/metrics/disfluency'
+import { computeCompositeFreezeScores } from '@/lib/metrics/freeze-score'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -66,6 +68,10 @@ export async function POST(req: NextRequest) {
     ? computeMetricsFromWords(transcriptionResult.words, durationSec)
     : computeMetricsFromTranscript(transcriptionResult.transcript, durationSec)
 
+  const hybridAnalysis = transcriptionResult.words?.length
+    ? detectSpeechDisfluencyEvents(transcriptionResult.words, transcriptionResult.transcript, durationSec)
+    : null
+
   // Create attempt record
   const { data: attempt, error: attemptError } = await supabase
     .from('attempts')
@@ -90,12 +96,81 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  // Generate AI coaching
-  const coaching = await generateCoaching(transcriptionResult.transcript, rawMetrics, prompt)
+  // Save event-level speech analysis (best effort while migration is rolling out)
+  if (hybridAnalysis && hybridAnalysis.speech_events.length > 0) {
+    try {
+      await supabase
+        .from('speech_events')
+        .insert(
+          hybridAnalysis.speech_events.map((event) => ({
+            attempt_id: attempt.id,
+            event_type: event.event_type,
+            start_ms: event.start_ms,
+            end_ms: event.end_ms,
+            severity: event.severity,
+            metadata: event.metadata ?? {},
+          }))
+        )
+    } catch (err) {
+      console.warn('speech_events insert skipped:', err)
+    }
+  }
 
-  // Override freeze resilience score with computed value
+  if (hybridAnalysis && hybridAnalysis.freeze_episodes.length > 0) {
+    try {
+      await supabase
+        .from('freeze_episodes')
+        .insert(
+          hybridAnalysis.freeze_episodes.map((episode) => ({
+            attempt_id: attempt.id,
+            start_ms: episode.start_ms,
+            end_ms: episode.end_ms,
+            recovered: episode.recovered,
+            speech_signals: episode.speech_signals,
+            visual_signals: episode.visual_signals,
+            recovery_phrase_used: episode.recovery_phrase_used,
+          }))
+        )
+    } catch (err) {
+      console.warn('freeze_episodes insert skipped:', err)
+    }
+  }
+
+  // Generate AI coaching
+  const coaching = await generateCoaching(
+    transcriptionResult.transcript,
+    rawMetrics,
+    prompt,
+    hybridAnalysis ?? undefined
+  )
+
+  // Blend v1 timing score + hybrid composite + AI interpretation.
   const computedFRS = computeFreezeResilienceScore(rawMetrics)
-  const finalFRS = Math.round((coaching.freeze_resilience_score + computedFRS) / 2)
+  const compositeScores = hybridAnalysis
+    ? computeCompositeFreezeScores(rawMetrics, hybridAnalysis.feature_vector, {
+        aiFreezeResilience: coaching.freeze_resilience_score,
+      })
+    : null
+
+  const finalFRS = compositeScores
+    ? Math.round((coaching.freeze_resilience_score + computedFRS + compositeScores.freeze_resilience_score) / 3)
+    : Math.round((coaching.freeze_resilience_score + computedFRS) / 2)
+
+  // Persist visual summary row (Phase 1 fallback values; upgraded in Phase 2 webcam pipeline).
+  try {
+    await supabase.from('visual_metrics').insert({
+      attempt_id: attempt.id,
+      face_visible_ratio: null,
+      face_centered_ratio: null,
+      avg_head_yaw: null,
+      head_yaw_std: null,
+      avg_head_pitch: null,
+      looking_away_ms: null,
+      visual_steadiness_score: compositeScores?.visual_steadiness_score ?? null,
+    })
+  } catch (err) {
+    console.warn('visual_metrics insert skipped:', err)
+  }
 
   // Save feedback
   const { data: feedbackRow } = await supabase
@@ -128,6 +203,12 @@ export async function POST(req: NextRequest) {
     metrics: metricsRow,
     feedback: feedbackRow,
     transcript: transcriptionResult.transcript,
+    hybrid: {
+      feature_vector: hybridAnalysis?.feature_vector ?? null,
+      composite_scores: compositeScores,
+      speech_event_count: hybridAnalysis?.speech_events.length ?? 0,
+      freeze_episode_count: hybridAnalysis?.freeze_episodes.length ?? 0,
+    },
     mock: transcriptionResult.mock || coaching.mock,
   })
 }

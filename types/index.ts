@@ -160,6 +160,81 @@ export interface ComputedMetrics {
   word_count: number
 }
 
+export type SpeechEventType =
+  | 'false_start'
+  | 'repeated_start'
+  | 'hesitation_cluster'
+  | 'freeze'
+  | 'recovery'
+  | 'bridge_phrase_recovery'
+
+export interface SpeechEvent {
+  event_type: SpeechEventType
+  start_ms: number
+  end_ms: number
+  severity: number // 0-1
+  metadata?: Record<string, unknown>
+}
+
+export interface FreezeEpisode {
+  start_ms: number
+  end_ms: number
+  recovered: boolean
+  speech_signals: Record<string, unknown>
+  visual_signals: Record<string, unknown>
+  recovery_phrase_used: boolean
+}
+
+export interface VisualEvent {
+  event_type: 'looking_away' | 'head_drop' | 'out_of_frame' | 'excessive_jitter'
+  start_ms: number
+  end_ms: number
+  severity: number // 0-1
+  metadata?: Record<string, unknown>
+}
+
+export interface VisualMetricsSummary {
+  face_visible_ratio: number
+  face_centered_ratio: number
+  avg_head_yaw: number
+  head_yaw_std: number
+  avg_head_pitch: number
+  looking_away_ms: number
+  visual_steadiness_score: number
+}
+
+export interface AttemptFeatureVector {
+  start_latency_ms: number
+  pause_count_500ms: number
+  pause_count_2000ms: number
+  longest_pause_ms: number
+  total_silence_ms: number
+  word_count: number
+  filler_count: number
+  filler_clusters: number
+  repeated_token_count: number
+  repeated_bigram_count: number
+  restart_count: number
+  bridge_phrase_count: number
+  speech_burst_mean_ms: number
+  speech_burst_std_ms: number
+  trailing_off_flag: boolean
+}
+
+export interface CompositeFreezeScores {
+  freeze_severity_index: number // 1-10
+  restart_efficiency_score: number // 1-10
+  visual_steadiness_score: number // 1-10
+  recovery_quality_score: number // 1-10
+  freeze_resilience_score: number // 1-10
+}
+
+export interface HybridAnalysisResult {
+  speech_events: SpeechEvent[]
+  freeze_episodes: FreezeEpisode[]
+  feature_vector: AttemptFeatureVector
+}
+
 // ─── Progress / analytics ────────────────────────────────────────────────────
 
 export interface ProgressDataPoint {
