@@ -136,7 +136,12 @@ offscript/
 │   │   ├── coaching.ts           # GPT-4o coaching with strict JSON rubric + mock fallback
 │   │   └── transcription.ts      # Whisper transcription with word timestamps + mock fallback
 │   ├── metrics/
-│   │   └── compute.ts            # Deterministic metric computation from word timestamps
+│   │   ├── compute.ts            # Deterministic timing metric computation from word timestamps
+│   │   ├── disfluency.ts         # Hybrid v1 speech-event detection (false starts, freezes, recoveries)
+│   │   ├── freeze-score.ts       # Composite freeze/resilience scoring from deterministic features
+│   │   └── audio.ts              # Low-level audio feature extraction scaffolding (PCM RMS/silence/onsets)
+│   ├── vision/
+│   │   └── analyze.ts            # Visual steadiness analysis scaffolding (face/head-pose aggregates)
 │   └── prompts/
 │       └── seed-data.ts          # 50+ typed prompt objects (TypeScript source of truth)
 │
@@ -144,9 +149,29 @@ offscript/
 ├── middleware.ts                 # Supabase session refresh + auth-gate routing
 │
 └── supabase/
-    ├── migrations/001_initial.sql # Full schema: profiles, prompts, sessions, attempts, metrics, feedback
+    ├── migrations/001_initial.sql # Base schema: profiles, prompts, sessions, attempts, metrics, feedback
+    ├── migrations/002_hybrid_freeze_v1.sql # Event-level hybrid modelling tables + RLS
     └── seed.sql                   # 25 ready-to-run seed prompts
 ```
+
+### Hybrid Freeze Modelling v1 (deterministic event layer)
+
+OffScript now includes a second deterministic signal layer on top of timestamp metrics:
+
+- **Speech event detection** from transcript + word timestamps:
+  - false starts
+  - repeated starts
+  - hesitation clusters
+  - freeze events
+  - recovery and bridge-phrase recovery events
+- **Freeze episode segmentation** with event-level storage (`start_ms`, `end_ms`, `recovered`, signal metadata)
+- **Composite scoring layer** that blends timing stability + disfluency profile + visual steadiness placeholder + AI interpretation
+
+The architecture principle is unchanged:
+
+- Deterministic quantities are computed in code.
+- AI interprets those quantities into coaching language.
+- Event-level data is persisted for future timeline and retry-comparison UX.
 
 ### Data flow for a completed attempt
 
@@ -279,6 +304,45 @@ One-to-one with attempts. AI-generated, structured.
 | `rescue_phrase` | text | A short usable bridge phrase for next time |
 | `retry_instruction` | text | One directive sentence for the retry |
 
+### `speech_events` (Hybrid v1)
+
+Event-level speech disfluency and freeze signal stream.
+
+| Column | Type | Description |
+|---|---|---|
+| `attempt_id` | uuid FK → attempts | Parent attempt |
+| `event_type` | text | `false_start`, `repeated_start`, `hesitation_cluster`, `freeze`, `recovery`, `bridge_phrase_recovery` |
+| `start_ms` / `end_ms` | integer | Event timing in milliseconds from session start |
+| `severity` | numeric 0–1 | Deterministic severity score for ranking event intensity |
+| `metadata` | jsonb | Flexible event payload (gap length, restart attempts, bridge phrase flags) |
+
+### `freeze_episodes` (Hybrid v1)
+
+Segmentation table for discrete freeze moments and outcome tracking.
+
+| Column | Type | Description |
+|---|---|---|
+| `attempt_id` | uuid FK → attempts | Parent attempt |
+| `start_ms` / `end_ms` | integer | Freeze episode boundaries |
+| `recovered` | boolean | Whether speech resumed after the freeze |
+| `speech_signals` | jsonb | Episode-level speech evidence bundle |
+| `visual_signals` | jsonb | Reserved for visual event overlays |
+| `recovery_phrase_used` | boolean | Whether a known bridge phrase was detected on recovery |
+
+### `visual_metrics` (Hybrid v1 scaffold)
+
+Per-attempt visual steadiness summary. In the current phase, this stores placeholders and composite score hooks while client frame sampling is being expanded.
+
+| Column | Type | Description |
+|---|---|---|
+| `attempt_id` | uuid FK → attempts | Parent attempt (one-to-one) |
+| `face_visible_ratio` | numeric | Percentage of frames with face detected |
+| `face_centered_ratio` | numeric | Percentage of detected-face frames in center-safe box |
+| `avg_head_yaw` / `head_yaw_std` | numeric | Head pose average + variability |
+| `avg_head_pitch` | numeric | Mean pitch over detected frames |
+| `looking_away_ms` | integer | Time estimate spent looking away |
+| `visual_steadiness_score` | smallint 1–10 | Derived visual composure index |
+
 ---
 
 ## Prompt bank
@@ -398,13 +462,14 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 **3a. Create a project** at [supabase.com](https://supabase.com). The free tier is sufficient.
 
-**3b. Run the migration.** In your project's SQL editor, paste and run the contents of:
+**3b. Run the migrations.** In your project's SQL editor, paste and run the contents of:
 
 ```
 supabase/migrations/001_initial.sql
+supabase/migrations/002_hybrid_freeze_v1.sql
 ```
 
-This creates all tables, RLS policies, indexes, the auto-profile trigger, and the storage bucket.
+This creates core tables, event-level hybrid tables, RLS policies, indexes, the auto-profile trigger, and the storage bucket.
 
 **3c. Seed the prompt bank.** Paste and run:
 
@@ -514,6 +579,8 @@ Or insert directly via the Supabase SQL editor or table editor.
 
 **Single-attempt model.** The current results page shows one attempt at a time. The database schema supports multiple attempts per session, ready for a side-by-side comparison view.
 
+**Visual scoring is scaffolded, not fully instrumented yet.** Hybrid v1 persists `visual_metrics` and includes deterministic scoring hooks, but live frame-sampled face/head-pose data collection is a staged follow-up.
+
 ---
 
 ## Roadmap
@@ -523,11 +590,11 @@ Or insert directly via the Supabase SQL editor or table editor.
 | Interview Mode | Architecture ready, prompts seeded |
 | Debate Flip Mode | Architecture ready |
 | Presentation Rescue (mid-sentence interruption) | Planned |
-| Side-by-side retry comparison | Planned |
+| Side-by-side retry comparison | Planned (schema now supports event-level timelines) |
 | Coach dashboard (classroom/team mode) | Planned |
 | Audio-only mode (no video) | Easy add — strip video track before Whisper |
 | Daily reminder notifications | Planned |
-| Face framing cues (basic webcam centering) | Planned |
+| Face framing cues (basic webcam centering) | In progress (server-side schema + analysis scaffold shipped) |
 | 500+ prompt bank | Easy — add to seed-data.ts |
 
 ---

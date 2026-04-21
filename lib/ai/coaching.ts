@@ -1,4 +1,4 @@
-import type { CoachingResult, ComputedMetrics, Prompt } from '@/types'
+import type { CoachingResult, ComputedMetrics, HybridAnalysisResult, Prompt } from '@/types'
 
 const MOCK_COACHING: CoachingResult = {
   clarity_score: 7,
@@ -19,11 +19,27 @@ const MOCK_COACHING: CoachingResult = {
 function buildCoachingPrompt(
   transcript: string,
   metrics: ComputedMetrics,
-  prompt: Prompt
+  prompt: Prompt,
+  hybrid?: HybridAnalysisResult
 ): string {
   const silenceSec = (metrics.total_silence_ms / 1000).toFixed(1)
   const longestPauseSec = (metrics.longest_pause_ms / 1000).toFixed(1)
   const firstSentenceSec = (metrics.time_to_first_sentence_ms / 1000).toFixed(1)
+
+  const hybridSection = hybrid
+    ? `
+HYBRID FREEZE ANALYSIS:
+- Speech events detected: ${hybrid.speech_events.length}
+- Freeze episodes detected: ${hybrid.freeze_episodes.length}
+- Restart count: ${hybrid.feature_vector.restart_count}
+- Repeated starts: ${hybrid.feature_vector.repeated_token_count}
+- Hesitation clusters: ${hybrid.feature_vector.filler_clusters}
+- Bridge phrase recoveries: ${hybrid.feature_vector.bridge_phrase_count}
+- Pause count >= 2s: ${hybrid.feature_vector.pause_count_2000ms}
+- Trailing off at end: ${hybrid.feature_vector.trailing_off_flag ? 'yes' : 'no'}
+- Notable events (JSON): ${JSON.stringify(hybrid.speech_events.slice(0, 8))}
+`
+    : ''
 
   return `You are an expert speaking coach evaluating a live unscripted response. Be specific, honest, and non-shaming.
 
@@ -43,6 +59,7 @@ COMPUTED METRICS:
 - Filler words: ${metrics.filler_count} (${metrics.filler_per_minute}/min)
 - Recovery moments (long pause then resumed): ${metrics.recovery_count}
 - Total word count: ${metrics.word_count}
+${hybridSection}
 
 SCORING RUBRIC:
 - clarity_score (1–10): directness of opening, relevance to prompt, understandable language
@@ -74,7 +91,8 @@ Respond with ONLY valid JSON, no markdown:
 export async function generateCoaching(
   transcript: string,
   metrics: ComputedMetrics,
-  prompt: Prompt
+  prompt: Prompt,
+  hybrid?: HybridAnalysisResult
 ): Promise<CoachingResult> {
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -91,7 +109,7 @@ export async function generateCoaching(
       messages: [
         {
           role: 'user',
-          content: buildCoachingPrompt(transcript, metrics, prompt),
+          content: buildCoachingPrompt(transcript, metrics, prompt, hybrid),
         },
       ],
       temperature: 0.4,
