@@ -7,10 +7,11 @@ import { cn } from '@/components/ui/cn'
 interface WebcamPreviewProps {
   stream: MediaStream | null
   recording?: boolean
+  centerCue?: boolean
   className?: string
 }
 
-export function WebcamPreview({ stream, recording, className }: WebcamPreviewProps) {
+export function WebcamPreview({ stream, recording, centerCue, className }: WebcamPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -51,6 +52,12 @@ export function WebcamPreview({ stream, recording, className }: WebcamPreviewPro
             transition={{ repeat: Infinity, duration: 1.2 }}
           />
           <span className="text-xs font-medium text-white">REC</span>
+        </div>
+      )}
+
+      {recording && centerCue && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-warning/20 border border-warning/40 text-warning px-3 py-1.5 rounded-lg text-xs backdrop-blur-sm">
+          Center yourself
         </div>
       )}
 

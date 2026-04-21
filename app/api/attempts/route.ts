@@ -9,6 +9,8 @@ import {
 } from '@/lib/metrics/compute'
 import { detectSpeechDisfluencyEvents } from '@/lib/metrics/disfluency'
 import { computeCompositeFreezeScores } from '@/lib/metrics/freeze-score'
+import { analyzeVisualSteadiness } from '@/lib/vision/analyze'
+import type { VisualTelemetryPayload } from '@/types'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
   const promptId = form.get('promptId') as string
   const attemptNumber = Number(form.get('attemptNumber') ?? '1')
   const durationSec = Number(form.get('durationSec') ?? '60')
+  const visualTelemetryRaw = form.get('visualTelemetry') as string | null
 
   if (!audioFile || !sessionId || !promptId) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -70,6 +73,11 @@ export async function POST(req: NextRequest) {
 
   const hybridAnalysis = transcriptionResult.words?.length
     ? detectSpeechDisfluencyEvents(transcriptionResult.words, transcriptionResult.transcript, durationSec)
+    : null
+  const durationMs = durationSec * 1000
+  const visualTelemetry = parseVisualTelemetry(visualTelemetryRaw, durationMs)
+  const visualAnalysis = visualTelemetry
+    ? analyzeVisualSteadiness(visualTelemetry.samples, durationMs)
     : null
 
   // Create attempt record
@@ -148,6 +156,7 @@ export async function POST(req: NextRequest) {
   const computedFRS = computeFreezeResilienceScore(rawMetrics)
   const compositeScores = hybridAnalysis
     ? computeCompositeFreezeScores(rawMetrics, hybridAnalysis.feature_vector, {
+        visual: visualAnalysis?.metrics,
         aiFreezeResilience: coaching.freeze_resilience_score,
       })
     : null
@@ -156,17 +165,18 @@ export async function POST(req: NextRequest) {
     ? Math.round((coaching.freeze_resilience_score + computedFRS + compositeScores.freeze_resilience_score) / 3)
     : Math.round((coaching.freeze_resilience_score + computedFRS) / 2)
 
-  // Persist visual summary row (Phase 1 fallback values; upgraded in Phase 2 webcam pipeline).
+  // Persist visual summary row.
   try {
+    const metrics = visualAnalysis?.metrics
     await supabase.from('visual_metrics').insert({
       attempt_id: attempt.id,
-      face_visible_ratio: null,
-      face_centered_ratio: null,
-      avg_head_yaw: null,
-      head_yaw_std: null,
-      avg_head_pitch: null,
-      looking_away_ms: null,
-      visual_steadiness_score: compositeScores?.visual_steadiness_score ?? null,
+      face_visible_ratio: metrics?.face_visible_ratio ?? null,
+      face_centered_ratio: metrics?.face_centered_ratio ?? null,
+      avg_head_yaw: metrics?.avg_head_yaw ?? null,
+      head_yaw_std: metrics?.head_yaw_std ?? null,
+      avg_head_pitch: metrics?.avg_head_pitch ?? null,
+      looking_away_ms: metrics?.looking_away_ms ?? null,
+      visual_steadiness_score: metrics?.visual_steadiness_score ?? compositeScores?.visual_steadiness_score ?? null,
     })
   } catch (err) {
     console.warn('visual_metrics insert skipped:', err)
@@ -208,9 +218,44 @@ export async function POST(req: NextRequest) {
       composite_scores: compositeScores,
       speech_event_count: hybridAnalysis?.speech_events.length ?? 0,
       freeze_episode_count: hybridAnalysis?.freeze_episodes.length ?? 0,
+      visual_telemetry_samples: visualTelemetry?.samples.length ?? 0,
     },
     mock: transcriptionResult.mock || coaching.mock,
   })
+}
+
+function parseVisualTelemetry(raw: string | null, durationMs: number): VisualTelemetryPayload | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as VisualTelemetryPayload
+    if (!Array.isArray(parsed.samples) || parsed.samples.length === 0) return null
+    const samples = parsed.samples
+      .map((sample) => ({
+        timestamp_ms: clamp(Math.round(asFiniteNumber(sample.timestamp_ms)), 0, durationMs),
+        face_detected: Boolean(sample.face_detected),
+        centered: Boolean(sample.centered),
+        yaw_deg: asFiniteNumber(sample.yaw_deg),
+        pitch_deg: asFiniteNumber(sample.pitch_deg),
+        looking_away: Boolean(sample.looking_away),
+      }))
+      .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    return {
+      samples,
+      duration_ms: durationMs,
+      sample_rate_hz: clamp(Math.round(parsed.sample_rate_hz || 0), 1, 30),
+    }
+  } catch {
+    return null
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function asFiniteNumber(value: unknown): number {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 async function updateStreak(supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>, userId: string) {

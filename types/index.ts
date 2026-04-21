@@ -203,6 +203,31 @@ export interface VisualMetricsSummary {
   visual_steadiness_score: number
 }
 
+export interface VisionFrameSample {
+  timestamp_ms: number
+  face_detected: boolean
+  centered: boolean
+  yaw_deg: number
+  pitch_deg: number
+  looking_away: boolean
+}
+
+export interface VisualTelemetryPayload {
+  samples: VisionFrameSample[]
+  duration_ms: number
+  sample_rate_hz: number
+}
+
+export interface TimelineEventView {
+  event_type: SpeechEventType
+  start_ms: number
+  end_ms: number
+  severity: number
+  label: string
+  tone: 'negative' | 'positive' | 'warning'
+  metadata?: Record<string, unknown>
+}
+
 export interface AttemptFeatureVector {
   start_latency_ms: number
   pause_count_500ms: number

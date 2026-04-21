@@ -3,8 +3,12 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { FeedbackPanel } from '@/components/results/FeedbackPanel'
 import { TranscriptView } from '@/components/results/TranscriptView'
+import { AttemptTimeline } from '@/components/results/AttemptTimeline'
 import { PromptCard } from '@/components/drill/PromptCard'
 import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { buildKeyMomentSummary, mapTimelineEvents } from '@/lib/results/timeline'
+import type { FreezeEpisode, SpeechEvent } from '@/types'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Results' }
@@ -25,7 +29,10 @@ export default async function ResultsPage({ params }: Props) {
       *,
       sessions!inner(*, user_id, prompts(*)),
       metrics(*),
-      feedback(*)
+      feedback(*),
+      speech_events(*),
+      freeze_episodes(*),
+      visual_metrics(*)
     `)
     .eq('id', attemptId)
     .single()
@@ -38,6 +45,11 @@ export default async function ResultsPage({ params }: Props) {
   const prompt = session.prompts
   const metrics = attempt.metrics
   const feedback = attempt.feedback
+  const speechEvents = (attempt.speech_events ?? []) as SpeechEvent[]
+  const freezeEpisodes = (attempt.freeze_episodes ?? []) as FreezeEpisode[]
+  const durationSec = Number(attempt.duration_sec ?? 60)
+  const timelineEvents = mapTimelineEvents(speechEvents)
+  const keyMoment = buildKeyMomentSummary(speechEvents, freezeEpisodes)
   const isMock = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.startsWith('sk-mock')
 
   return (
@@ -88,6 +100,21 @@ export default async function ResultsPage({ params }: Props) {
       )}
 
       {/* Feedback */}
+      {timelineEvents.length > 0 && (
+        <AttemptTimeline
+          durationSec={durationSec}
+          events={timelineEvents}
+          episodes={freezeEpisodes}
+        />
+      )}
+
+      {keyMoment && (
+        <Card className="p-5 border-accent/20 bg-accent/5">
+          <p className="text-[10px] font-medium uppercase tracking-widest text-accent mb-2">Key moment</p>
+          <p className="text-sm text-text-primary">{keyMoment}</p>
+        </Card>
+      )}
+
       {feedback && metrics && (
         <FeedbackPanel
           feedback={feedback as Parameters<typeof FeedbackPanel>[0]['feedback']}

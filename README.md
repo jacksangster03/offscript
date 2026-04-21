@@ -454,6 +454,9 @@ OPENAI_API_KEY=sk-proj-...
 
 # Your local or production URL (used for auth redirects)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Hybrid v1.5: browser visual telemetry (MediaPipe FaceMesh)
+NEXT_PUBLIC_ENABLE_VISUAL_TELEMETRY=false
 ```
 
 > If you skip `OPENAI_API_KEY`, the app still works fully. All transcription and coaching falls back to realistic mock data. A small "demo mode" badge appears on the results page.
@@ -579,7 +582,7 @@ Or insert directly via the Supabase SQL editor or table editor.
 
 **Single-attempt model.** The current results page shows one attempt at a time. The database schema supports multiple attempts per session, ready for a side-by-side comparison view.
 
-**Visual scoring is scaffolded, not fully instrumented yet.** Hybrid v1 persists `visual_metrics` and includes deterministic scoring hooks, but live frame-sampled face/head-pose data collection is a staged follow-up.
+**Visual telemetry is feature-flagged.** Hybrid v1.5 can capture frame-level face/head-pose summaries in-browser, but it is gated behind `NEXT_PUBLIC_ENABLE_VISUAL_TELEMETRY` for controlled rollout and device compatibility.
 
 ---
 
@@ -594,7 +597,8 @@ Or insert directly via the Supabase SQL editor or table editor.
 | Coach dashboard (classroom/team mode) | Planned |
 | Audio-only mode (no video) | Easy add — strip video track before Whisper |
 | Daily reminder notifications | Planned |
-| Face framing cues (basic webcam centering) | In progress (server-side schema + analysis scaffold shipped) |
+| Face framing cues (basic webcam centering) | Shipped in v1.5 (feature-flagged) |
+| Event timeline on results | Shipped in v1.5 (speech events + freeze episodes) |
 | 500+ prompt bank | Easy — add to seed-data.ts |
 
 ---

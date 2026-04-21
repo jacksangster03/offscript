@@ -1,13 +1,4 @@
-import type { VisualEvent, VisualMetricsSummary } from '@/types'
-
-export interface VisionFrameSample {
-  timestamp_ms: number
-  face_detected: boolean
-  centered: boolean
-  yaw_deg: number
-  pitch_deg: number
-  looking_away: boolean
-}
+import type { VisualEvent, VisualMetricsSummary, VisionFrameSample } from '@/types'
 
 export interface VisionAnalysisResult {
   metrics: VisualMetricsSummary

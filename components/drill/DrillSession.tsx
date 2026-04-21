@@ -6,12 +6,14 @@ import { useRouter } from 'next/navigation'
 import type { Prompt, DrillPhase } from '@/types'
 import { useTimer } from '@/hooks/useTimer'
 import { useRecorder } from '@/hooks/useRecorder'
+import { useVisualTelemetry } from '@/hooks/useVisualTelemetry'
 import { CircularTimer } from './CircularTimer'
 import { MicWaveform } from './MicWaveform'
 import { WebcamPreview } from './WebcamPreview'
 import { PromptCard } from './PromptCard'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/components/ui/cn'
+import { isVisualTelemetryEnabled } from '@/lib/vision/flags'
 
 const PREP_SECONDS = 20
 const SPEAK_SECONDS = 60
@@ -30,6 +32,12 @@ export function DrillSession({ sessionId, prompt, attemptNumber = 1, retryMode }
   const [rescueCue, setRescueCue] = useState<string | null>(null)
 
   const recorder = useRecorder()
+  const visualEnabled = isVisualTelemetryEnabled()
+  const visualTelemetry = useVisualTelemetry({
+    stream: recorder.stream,
+    active: phase === 'speaking',
+    enabled: visualEnabled,
+  })
 
   const prepTimer = useTimer(PREP_SECONDS, {
     onComplete: () => beginSpeaking(),
@@ -99,6 +107,10 @@ export function DrillSession({ sessionId, prompt, attemptNumber = 1, retryMode }
     form.append('promptId', prompt.id)
     form.append('attemptNumber', String(attemptNumber))
     form.append('durationSec', String(SPEAK_SECONDS))
+    const telemetry = visualTelemetry.getTelemetry()
+    if (telemetry && visualTelemetry.captureEnabled) {
+      form.append('visualTelemetry', JSON.stringify(telemetry))
+    }
 
     const res = await fetch('/api/attempts', { method: 'POST', body: form })
     if (!res.ok) throw new Error('Analysis failed')
@@ -225,6 +237,7 @@ export function DrillSession({ sessionId, prompt, attemptNumber = 1, retryMode }
               <WebcamPreview
                 stream={recorder.stream}
                 recording={phase === 'speaking'}
+                centerCue={visualTelemetry.captureEnabled && visualTelemetry.offCenterTooLong}
                 className="aspect-[4/3] w-full"
               />
               <PromptCard prompt={prompt} showRetryAngle={retryMode} compact />
