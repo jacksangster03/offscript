@@ -30,6 +30,7 @@ export default async function ResultsPage({ params }: Props) {
       sessions!inner(*, user_id, prompts(*)),
       metrics(*),
       feedback(*),
+      curiosity_feedback(*),
       speech_events(*),
       freeze_episodes(*),
       visual_metrics(*)

@@ -10,7 +10,8 @@ import {
 import { detectSpeechDisfluencyEvents } from '@/lib/metrics/disfluency'
 import { computeCompositeFreezeScores } from '@/lib/metrics/freeze-score'
 import { analyzeVisualSteadiness } from '@/lib/vision/analyze'
-import type { VisualTelemetryPayload } from '@/types'
+import { scoreCuriosityFromTranscript } from '@/lib/curiosity/scoring'
+import type { Prompt, VisualTelemetryPayload } from '@/types'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -24,23 +25,24 @@ export async function POST(req: NextRequest) {
   const audioFile = form.get('audio') as File | null
   const sessionId = form.get('sessionId') as string
   const promptId = form.get('promptId') as string
+  const topicId = asNullableString(form.get('topicId'))
+  const topicPromptId = asNullableString(form.get('topicPromptId'))
+  const sourceMode = asNullableString(form.get('sourceMode'))
   const attemptNumber = Number(form.get('attemptNumber') ?? '1')
   const durationSec = Number(form.get('durationSec') ?? '60')
   const visualTelemetryRaw = form.get('visualTelemetry') as string | null
 
-  if (!audioFile || !sessionId || !promptId) {
+  if (!audioFile || !sessionId || (!promptId && !topicPromptId)) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Fetch the prompt
-  const { data: prompt, error: promptError } = await supabase
-    .from('prompts')
-    .select('*')
-    .eq('id', promptId)
-    .single()
-
-  if (promptError || !prompt) {
-    return NextResponse.json({ error: 'Prompt not found' }, { status: 404 })
+  const prompt = await resolvePromptContext(supabase, {
+    promptId: promptId || null,
+    topicPromptId,
+    topicId,
+  })
+  if (!prompt) {
+    return NextResponse.json({ error: 'Prompt context not found' }, { status: 404 })
   }
 
   // Upload audio to Supabase storage
@@ -89,6 +91,9 @@ export async function POST(req: NextRequest) {
       audio_url: audioUrl,
       transcript: transcriptionResult.transcript,
       duration_sec: durationSec,
+      topic_id: topicId,
+      topic_prompt_id: topicPromptId,
+      source_mode: sourceMode,
     })
     .select()
     .single()
@@ -199,6 +204,46 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
+  let curiosityRow: Record<string, unknown> | null = null
+  try {
+    const curiosity = await scoreCuriosityFromTranscript({
+      transcript: transcriptionResult.transcript,
+      prompt,
+      metrics: rawMetrics,
+    })
+    const { data } = await supabase
+      .from('curiosity_feedback')
+      .insert({
+        attempt_id: attempt.id,
+        topic_id: topicId,
+        topic_prompt_id: topicPromptId,
+        interestingness_score: curiosity.interestingness_score,
+        explanation_score: curiosity.explanation_score,
+        connection_score: curiosity.connection_score,
+        analogy_score: curiosity.analogy_score,
+        opinion_score: curiosity.opinion_score,
+        example_score: curiosity.example_score,
+        curiosity_score: curiosity.curiosity_score,
+        one_interesting_thing: curiosity.one_interesting_thing,
+        missed_opportunity: curiosity.missed_opportunity,
+        stronger_reframe: curiosity.stronger_reframe,
+        suggested_related_topic: curiosity.suggested_related_topic,
+      })
+      .select()
+      .single()
+    curiosityRow = data as Record<string, unknown>
+    await updateUserCategoryStats(supabase, {
+      userId: user.id,
+      topicPromptId,
+      freezeResilience: finalFRS,
+      curiosityScore: curiosity.curiosity_score,
+      interestingness: curiosity.interestingness_score,
+      difficulty: prompt.difficulty,
+    })
+  } catch (err) {
+    console.warn('curiosity_feedback insert skipped:', err)
+  }
+
   // Mark session complete
   await supabase
     .from('sessions')
@@ -220,8 +265,56 @@ export async function POST(req: NextRequest) {
       freeze_episode_count: hybridAnalysis?.freeze_episodes.length ?? 0,
       visual_telemetry_samples: visualTelemetry?.samples.length ?? 0,
     },
+    curiosity: curiosityRow,
     mock: transcriptionResult.mock || coaching.mock,
   })
+}
+
+async function resolvePromptContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: { promptId: string | null; topicPromptId: string | null; topicId: string | null }
+): Promise<Prompt | null> {
+  if (input.promptId) {
+    const { data } = await supabase
+      .from('prompts')
+      .select('*')
+      .eq('id', input.promptId)
+      .single()
+    if (data) {
+      return data as Prompt
+    }
+  }
+
+  if (input.topicPromptId) {
+    const { data } = await supabase
+      .from('topic_prompts')
+      .select('*, topics(*)')
+      .eq('id', input.topicPromptId)
+      .single()
+    if (data) {
+      const topic = (data as { topics?: { title?: string; source_label?: string; source_url?: string } }).topics
+      return {
+        id: data.id,
+        topic: topic?.title ?? 'Topic',
+        category: 'society',
+        difficulty: (data.difficulty ?? 2) as 1 | 2 | 3 | 4,
+        stance_type: 'open',
+        prompt_text: data.prompt_text,
+        context_bullets: Array.isArray(data.context_bullets) ? data.context_bullets : [],
+        retry_angle: data.retry_angle ?? 'Try a stronger angle and a concrete example.',
+        tags: ['topic', data.prompt_variant],
+        active: true,
+        created_at: data.created_at,
+        speaking_angle: data.speaking_angle,
+        source_label: data.source_label ?? topic?.source_label ?? null,
+        source_url: data.source_url ?? topic?.source_url ?? null,
+        topic_id: data.topic_id ?? input.topicId,
+        topic_prompt_id: data.id,
+      }
+    }
+  }
+
+  return null
 }
 
 function parseVisualTelemetry(raw: string | null, durationMs: number): VisualTelemetryPayload | null {
@@ -258,6 +351,12 @@ function asFiniteNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function asNullableString(value: FormDataEntryValue | null): string | null {
+  if (!value) return null
+  const text = String(value).trim()
+  return text.length > 0 ? text : null
+}
+
 async function updateStreak(supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>, userId: string) {
   const today = new Date().toISOString().split('T')[0]
 
@@ -284,4 +383,75 @@ async function updateStreak(supabase: Awaited<ReturnType<typeof import('@/lib/su
     .from('profiles')
     .update({ streak_count: newStreak, last_session_date: today })
     .eq('id', userId)
+}
+
+async function updateUserCategoryStats(
+  supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>,
+  input: {
+    userId: string
+    topicPromptId: string | null
+    freezeResilience: number
+    curiosityScore: number
+    interestingness: number
+    difficulty: number
+  }
+) {
+  if (!input.topicPromptId) return
+
+  const { data: topicPrompt } = await supabase
+    .from('topic_prompts')
+    .select('category_id')
+    .eq('id', input.topicPromptId)
+    .single()
+
+  const categoryId = topicPrompt?.category_id as string | null
+  if (!categoryId) return
+
+  const { data: existing } = await supabase
+    .from('user_category_stats')
+    .select('*')
+    .eq('user_id', input.userId)
+    .eq('category_id', categoryId)
+    .single()
+
+  if (!existing) {
+    await supabase.from('user_category_stats').insert({
+      user_id: input.userId,
+      category_id: categoryId,
+      attempts_count: 1,
+      avg_freeze_resilience: input.freezeResilience,
+      avg_interestingness: input.interestingness,
+      avg_curiosity: input.curiosityScore,
+      avg_difficulty: input.difficulty,
+      last_attempt_at: new Date().toISOString(),
+      avoided_streak: 0,
+    })
+    return
+  }
+
+  const attempts = Number(existing.attempts_count ?? 0)
+  const nextAttempts = attempts + 1
+  const avgFreeze = movingAverage(existing.avg_freeze_resilience, attempts, input.freezeResilience)
+  const avgInterestingness = movingAverage(existing.avg_interestingness, attempts, input.interestingness)
+  const avgCuriosity = movingAverage(existing.avg_curiosity, attempts, input.curiosityScore)
+  const avgDifficulty = movingAverage(existing.avg_difficulty, attempts, input.difficulty)
+
+  await supabase
+    .from('user_category_stats')
+    .update({
+      attempts_count: nextAttempts,
+      avg_freeze_resilience: avgFreeze,
+      avg_interestingness: avgInterestingness,
+      avg_curiosity: avgCuriosity,
+      avg_difficulty: avgDifficulty,
+      last_attempt_at: new Date().toISOString(),
+      avoided_streak: 0,
+    })
+    .eq('id', existing.id)
+}
+
+function movingAverage(currentAvg: number | null, currentCount: number, nextValue: number): number {
+  const avg = Number(currentAvg ?? 0)
+  if (currentCount <= 0) return nextValue
+  return Math.round(((avg * currentCount + nextValue) / (currentCount + 1)) * 100) / 100
 }
