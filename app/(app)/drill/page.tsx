@@ -12,6 +12,7 @@ function DrillPageContent() {
   const searchParams = useSearchParams()
   const mode = (searchParams.get('mode') ?? 'daily') as DrillMode
   const retrySessionId = searchParams.get('retry')
+  const fromTopicId = searchParams.get('fromTopicId')
   const topicMode = searchParams.get('topic') === '1' || isCuriosityMode(mode)
 
   const [loading, setLoading] = useState(true)
@@ -48,7 +49,10 @@ function DrillPageContent() {
         } else {
           // Fetch a random prompt via API
           const endpoint = topicMode ? '/api/topics' : '/api/prompts'
-          const res = await fetch(`${endpoint}?mode=${mode}`)
+          const url = new URL(endpoint, window.location.origin)
+          url.searchParams.set('mode', mode)
+          if (fromTopicId) url.searchParams.set('fromTopicId', fromTopicId)
+          const res = await fetch(url.toString())
           if (!res.ok) throw new Error('Failed to load prompt')
           fetchedPrompt = await res.json()
         }
@@ -89,7 +93,7 @@ function DrillPageContent() {
     }
 
     bootstrap()
-  }, [mode, retrySessionId, router, topicMode])
+  }, [mode, retrySessionId, router, topicMode, fromTopicId])
 
   if (loading) {
     return (

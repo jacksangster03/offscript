@@ -442,21 +442,17 @@ cp .env.local.example .env.local
 Open `.env.local` and fill in:
 
 ```env
-# From https://supabase.com/dashboard/project/_/settings/api
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=replace-with-your-supabase-anon-key
 
-# Service role key — used server-side only, never exposed to browser
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+SUPABASE_SERVICE_ROLE_KEY=replace-with-your-supabase-service-role-key
 
-# OpenAI — optional. If unset, the app runs in mock mode automatically.
-OPENAI_API_KEY=sk-proj-...
+OPENAI_API_KEY=replace-with-your-openai-api-key
 
-# Your local or production URL (used for auth redirects)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Hybrid v1.5: browser visual telemetry (MediaPipe FaceMesh)
 NEXT_PUBLIC_ENABLE_VISUAL_TELEMETRY=false
+INGEST_SECRET=replace-with-long-random-secret
 ```
 
 > If you skip `OPENAI_API_KEY`, the app still works fully. All transcription and coaching falls back to realistic mock data. A small "demo mode" badge appears on the results page.

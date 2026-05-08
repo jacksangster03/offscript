@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const mode = (searchParams.get('mode') ?? 'daily') as DrillMode
   const difficulty = parseDifficulty(searchParams.get('difficulty'))
+  const fromTopicId = searchParams.get('fromTopicId')
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -26,6 +27,18 @@ export async function GET(req: NextRequest) {
 
     if (difficulty) query = query.eq('difficulty', difficulty)
     if (mode === 'chaos') query = query.gte('difficulty', 3)
+    if (mode === 'rabbit_hole' && fromTopicId) {
+      const { data: edges } = await supabase
+        .from('topic_edges')
+        .select('to_topic_id')
+        .eq('from_topic_id', fromTopicId)
+        .order('weight', { ascending: false })
+        .limit(20)
+      const relatedIds = (edges ?? []).map((e) => e.to_topic_id).filter(Boolean)
+      if (relatedIds.length) {
+        query = query.in('topic_id', relatedIds)
+      }
+    }
 
     const { data, error } = await query
     if (error || !data || data.length === 0) {
