@@ -12,6 +12,7 @@ interface AppNavProps {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/curiosity', label: 'Curiosity' },
   { href: '/progress', label: 'Progress' },
   { href: '/settings', label: 'Settings' },
 ]
