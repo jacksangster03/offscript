@@ -208,7 +208,18 @@ export interface FreezeEpisode {
 }
 
 export interface VisualEvent {
-  event_type: 'looking_away' | 'head_drop' | 'out_of_frame' | 'excessive_jitter'
+  event_type:
+    | 'face_lost'
+    | 'off_center'
+    | 'looking_away'
+    | 'large_head_movement'
+    | 'low_visual_energy'
+    | 'gesture_burst'
+    | 'hands_not_visible'
+    | 'camera_framing_issue'
+    | 'head_drop'
+    | 'out_of_frame'
+    | 'excessive_jitter'
   start_ms: number
   end_ms: number
   severity: number // 0-1

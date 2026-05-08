@@ -183,8 +183,20 @@ export async function POST(req: NextRequest) {
       looking_away_ms: metrics?.looking_away_ms ?? null,
       visual_steadiness_score: metrics?.visual_steadiness_score ?? compositeScores?.visual_steadiness_score ?? null,
     })
+    if (visualAnalysis?.events?.length) {
+      await supabase.from('visual_events').insert(
+        visualAnalysis.events.map((event) => ({
+          attempt_id: attempt.id,
+          event_type: event.event_type,
+          start_ms: event.start_ms,
+          end_ms: event.end_ms,
+          severity: event.severity,
+          metadata: event.metadata ?? {},
+        }))
+      )
+    }
   } catch (err) {
-    console.warn('visual_metrics insert skipped:', err)
+    console.warn('visual_metrics/visual_events insert skipped:', err)
   }
 
   // Save feedback

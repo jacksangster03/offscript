@@ -1,15 +1,17 @@
 'use client'
 
 import { Card } from '@/components/ui/Card'
-import type { FreezeEpisode, TimelineEventView } from '@/types'
+import { VisualTimelineLane } from '@/components/vision/VisualTimelineLane'
+import type { FreezeEpisode, TimelineEventView, VisualEvent } from '@/types'
 
 interface AttemptTimelineProps {
   durationSec: number
   events: TimelineEventView[]
   episodes: FreezeEpisode[]
+  visualEvents?: VisualEvent[]
 }
 
-export function AttemptTimeline({ durationSec, events, episodes }: AttemptTimelineProps) {
+export function AttemptTimeline({ durationSec, events, episodes, visualEvents = [] }: AttemptTimelineProps) {
   const durationMs = Math.max(1, durationSec * 1000)
 
   return (
@@ -56,6 +58,8 @@ export function AttemptTimeline({ durationSec, events, episodes }: AttemptTimeli
         <span>0s</span>
         <span>{durationSec}s</span>
       </div>
+
+      <VisualTimelineLane durationMs={durationMs} events={visualEvents} />
     </Card>
   )
 }

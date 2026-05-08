@@ -8,7 +8,7 @@ import { PromptCard } from '@/components/drill/PromptCard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { buildKeyMomentSummary, mapTimelineEvents } from '@/lib/results/timeline'
-import type { FreezeEpisode, SpeechEvent } from '@/types'
+import type { FreezeEpisode, SpeechEvent, VisualEvent } from '@/types'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Results' }
@@ -33,7 +33,8 @@ export default async function ResultsPage({ params }: Props) {
       curiosity_feedback(*),
       speech_events(*),
       freeze_episodes(*),
-      visual_metrics(*)
+      visual_metrics(*),
+      visual_events(*)
     `)
     .eq('id', attemptId)
     .single()
@@ -48,6 +49,7 @@ export default async function ResultsPage({ params }: Props) {
   const feedback = attempt.feedback
   const speechEvents = (attempt.speech_events ?? []) as SpeechEvent[]
   const freezeEpisodes = (attempt.freeze_episodes ?? []) as FreezeEpisode[]
+  const visualEvents = (attempt.visual_events ?? []) as VisualEvent[]
   const durationSec = Number(attempt.duration_sec ?? 60)
   const timelineEvents = mapTimelineEvents(speechEvents)
   const keyMoment = buildKeyMomentSummary(speechEvents, freezeEpisodes)
@@ -106,6 +108,7 @@ export default async function ResultsPage({ params }: Props) {
           durationSec={durationSec}
           events={timelineEvents}
           episodes={freezeEpisodes}
+          visualEvents={visualEvents}
         />
       )}
 

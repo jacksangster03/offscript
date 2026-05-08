@@ -1,4 +1,5 @@
 import type { VisualEvent, VisualMetricsSummary, VisionFrameSample } from '@/types'
+import { deriveVisualEvents } from './events'
 
 export interface VisionAnalysisResult {
   metrics: VisualMetricsSummary
@@ -53,7 +54,7 @@ export function analyzeVisualSteadiness(
       looking_away_ms: lookingAwayMs,
       visual_steadiness_score: Math.max(1, Math.min(10, Math.round(steadinessRaw * 9 + 1))),
     },
-    events: [],
+    events: deriveVisualEvents(frames, durationMs),
   }
 }
 
