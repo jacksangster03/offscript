@@ -586,6 +586,189 @@ Or insert directly via the Supabase SQL editor or table editor.
 
 ---
 
+## Curiosity Engine (Next Production Phase)
+
+OffScript's next phase is the **Curiosity Engine**: a speaking gym for becoming better at talking about anything, across 40+ domains, without losing the existing freeze/recovery strengths.
+
+### Product intent
+
+- Keep the current drill speed and reliability.
+- Keep deterministic measurement first.
+- Add richer topic variety and contextual prompts that are speakable even for unfamiliar topics.
+- Add curiosity-aware scoring and conversational range tracking.
+- Preserve demo/mock behavior when Supabase or OpenAI is not configured.
+
+### 40 seeded top-level categories
+
+1. Science
+2. Technology
+3. Business & Economics
+4. History
+5. Geography & Places
+6. Politics & Power
+7. Philosophy & Ideas
+8. Psychology & Human Behaviour
+9. Communication & Language
+10. Culture & Society
+11. Art, Design & Aesthetics
+12. Literature, Film & Media
+13. Music & Sound
+14. Health, Medicine & Human Performance
+15. Sport, Games & Competition
+16. Food, Agriculture & Environment
+17. Nature, Animals & the Living World
+18. Religion, Mythology & Belief
+19. Law, Crime & Justice
+20. War, Strategy & Security
+21. Space & the Cosmos
+22. The Future
+23. Personal Development & Life Skills
+24. Education & Learning
+25. Travel & Adventure
+26. Engineering, Infrastructure & Built World
+27. Energy, Climate & Resources
+28. Fashion, Status & Lifestyle
+29. Internet, Memes & Digital Culture
+30. Weird, Obscure & Random
+31. Concepts & Mental Models
+32. People & Biography
+33. Objects, Inventions & Everyday Things
+34. Emotions, Relationships & Social Life
+35. Ethics, Dilemmas & Controversies
+36. Explanations of Modern Life
+37. Debate Motions
+38. Make Boring Things Interesting
+39. Cross-Domain Connections
+40. Personal Opinion Prompts
+
+### New data model (planned migration `003_curiosity_engine.sql`)
+
+Add tables:
+- `topic_categories`
+- `topics`
+- `topic_category_links`
+- `topic_prompts`
+- `curiosity_feedback`
+- `user_category_stats`
+- `topic_edges`
+- `challenges`
+- `challenge_days`
+- `visual_events` (if visual event segmentation is enabled)
+
+Extend existing:
+- `attempts.topic_id` (nullable)
+- `attempts.topic_prompt_id` (nullable)
+- `attempts.source_mode` (nullable)
+
+RLS principles:
+- Authenticated users can read active public categories/topics/prompts.
+- Users can only read/write their own curiosity feedback/stats/challenges.
+- Ingestion remains server-side only; never expose service-role operations to browser code.
+
+### Core libs to add
+
+- `lib/topics/taxonomy.ts`: canonical category seeds, slugs, groupings.
+- `lib/topics/wiki.ts`: timeout-safe Wikipedia candidate and summary fetchers.
+- `lib/topics/quality.ts`: speakability/quality filters, disambiguation/list rejection.
+- `lib/topics/generate.ts`: strict JSON prompt generation with deterministic fallback.
+- `lib/topics/recommend.ts`: user-aware next-topic recommendation.
+- `lib/curiosity/scoring.ts`: structured curiosity scoring with clamped outputs.
+- `lib/curiosity/range.ts`: conversational range score and coverage stats.
+- `lib/topics/trails.ts`: related-topic graph generation/fallback.
+- `lib/vision/events.ts`: conservative visual event segmentation from telemetry samples.
+
+### New API surface
+
+- `GET /api/topics`: fetch topic prompt for drill (prefer cached DB prompts).
+- `POST /api/topics/ingest`: protected server-side ingestion batch.
+- `GET /api/topics/trails`: fetch related topics/edges.
+- `GET /api/curiosity/range`: range dashboard payload.
+- `GET/POST /api/challenges`: list/create challenges.
+- `GET /api/challenges/[id]/today`: fetch challenge-day prompt.
+
+Modify:
+- `POST /api/attempts` to accept optional `topic_prompt_id` / `topic_id`, persist topic linkage, compute curiosity feedback, and update user category stats.
+
+### Drill modes (Curiosity Engine)
+
+- Daily Random
+- Deep Random
+- Dinner Table Mode
+- Make Boring Things Interesting
+- Cross-Domain Connection
+- Debate Mode
+- Explain Like I’m 12
+- Rabbit Hole Mode
+- Challenge Day
+
+### Prompt shape for topic drills
+
+Every topic prompt should include:
+- `topic title`
+- `category`
+- `difficulty`
+- `prompt text`
+- `3-4 context bullets`
+- `speaking angle`
+- optional image/thumbnail
+- `retry angle`
+- quiet `source_label` + `source_url`
+
+The drill must never block on live Wikipedia/Wikidata/OpenAI requests. Prompt generation should be pre-generated/cached or use deterministic local fallback.
+
+### Curiosity feedback outputs (alongside existing freeze metrics)
+
+- Interestingness score
+- Explanation score
+- Connection score
+- Analogy score
+- Opinion score
+- Example score
+- One thing that made answer interesting
+- One missed opportunity
+- Stronger reframe
+- Suggested related topic
+
+### Conversational Range Score formula
+
+Weighted blend:
+- 25% category breadth
+- 20% category balance
+- 20% average curiosity/interestingness
+- 15% difficulty progression
+- 10% weak-domain courage
+- 10% cross-domain connection quality
+
+### Visual expansion guardrails
+
+- Do not store raw frames.
+- Use only in-memory frame summaries and aggregated event rows.
+- Use conservative terms: face visible, centeredness, looking-away proxy, head movement, gesture rhythm.
+- Avoid emotional or medical claims.
+
+### Challenge templates (foundation)
+
+1. 7-Day Speak About Anything
+2. 14-Day Become Hard to Throw Off
+3. 7-Day Weird World
+4. 7-Day Weak Domain Builder
+5. 14-Day Dinner Table Interesting
+6. 7-Day Cross-Domain Connector
+
+Paid challenge gating should remain behind feature flags/TODOs unless payments are explicitly implemented later.
+
+### Implementation order
+
+- Phase A: migration/types/taxonomy/local fallback topic bank.
+- Phase B: ingestion utilities + quality scoring + prompt variant generation.
+- Phase C: drill/attempt integration + curiosity scoring persistence.
+- Phase D: range dashboard + category heatmap + recommendations.
+- Phase E: topic trails + Rabbit Hole mode.
+- Phase F: challenge foundation.
+- Phase G: visual event lane expansion.
+
+---
+
 ## Roadmap
 
 | Feature | Status |
