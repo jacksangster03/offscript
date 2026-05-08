@@ -96,6 +96,20 @@ export function PromptCard({ prompt, showRetryAngle, compact, className }: Promp
             <p className="text-sm text-text-secondary italic">&ldquo;{prompt.retry_angle}&rdquo;</p>
           </div>
         )}
+
+        {prompt.speaking_angle && (
+          <div className="mt-4 pt-4 border-t border-border-subtle">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-text-muted mb-1.5">Speaking angle</p>
+            <p className="text-sm text-text-secondary">{prompt.speaking_angle}</p>
+          </div>
+        )}
+
+        {(prompt.source_label || prompt.source_url) && (
+          <div className="mt-4 text-[11px] text-text-disabled">
+            Source: {prompt.source_label ?? 'Reference'}
+            {prompt.source_url ? ` · ${prompt.source_url}` : ''}
+          </div>
+        )}
       </div>
     </motion.div>
   )

@@ -12,6 +12,7 @@ function DrillPageContent() {
   const searchParams = useSearchParams()
   const mode = (searchParams.get('mode') ?? 'daily') as DrillMode
   const retrySessionId = searchParams.get('retry')
+  const topicMode = searchParams.get('topic') === '1' || isCuriosityMode(mode)
 
   const [loading, setLoading] = useState(true)
   const [prompt, setPrompt] = useState<Prompt | null>(null)
@@ -46,26 +47,39 @@ function DrillPageContent() {
           fetchedPrompt = originalSession.prompts as Prompt
         } else {
           // Fetch a random prompt via API
-          const res = await fetch(`/api/prompts?mode=${mode}`)
+          const endpoint = topicMode ? '/api/topics' : '/api/prompts'
+          const res = await fetch(`${endpoint}?mode=${mode}`)
           if (!res.ok) throw new Error('Failed to load prompt')
           fetchedPrompt = await res.json()
         }
 
+        async function createSessionFromPrompt(candidatePrompt: Prompt): Promise<Session | null> {
+          const sessionRes = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              promptId: candidatePrompt.id,
+              mode,
+              difficulty: candidatePrompt.difficulty,
+            }),
+          })
+          if (!sessionRes.ok) return null
+          return (await sessionRes.json()) as Session
+        }
+
+        let newSession = await createSessionFromPrompt(fetchedPrompt)
+
+        // Topic prompts may not map to legacy sessions/prompt FK yet.
+        // Fall back seamlessly to existing prompt flow.
+        if (!newSession && topicMode) {
+          const fallbackRes = await fetch(`/api/prompts?mode=${mode}`)
+          if (!fallbackRes.ok) throw new Error('Failed to load prompt')
+          fetchedPrompt = (await fallbackRes.json()) as Prompt
+          newSession = await createSessionFromPrompt(fetchedPrompt)
+        }
+
+        if (!newSession) throw new Error('Failed to create session')
         setPrompt(fetchedPrompt)
-
-        // Create session
-        const sessionRes = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            promptId: fetchedPrompt.id,
-            mode,
-            difficulty: fetchedPrompt.difficulty,
-          }),
-        })
-
-        if (!sessionRes.ok) throw new Error('Failed to create session')
-        const newSession = await sessionRes.json()
         setSession(newSession)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -75,7 +89,7 @@ function DrillPageContent() {
     }
 
     bootstrap()
-  }, [mode, retrySessionId, router])
+  }, [mode, retrySessionId, router, topicMode])
 
   if (loading) {
     return (
@@ -126,6 +140,19 @@ function DrillPageContent() {
         retryMode={!!retrySessionId}
       />
     </div>
+  )
+}
+
+function isCuriosityMode(mode: DrillMode): boolean {
+  return (
+    mode === 'deep_random' ||
+    mode === 'dinner_table' ||
+    mode === 'make_boring_interesting' ||
+    mode === 'cross_domain' ||
+    mode === 'debate_mode' ||
+    mode === 'explain_like_12' ||
+    mode === 'rabbit_hole' ||
+    mode === 'challenge_day'
   )
 }
 

@@ -1,6 +1,20 @@
 // ─── Enums ─────────────────────────────────────────────────────────────────
 
-export type DrillMode = 'daily' | 'chaos' | 'retry' | 'interview' | 'debate' | 'rescue'
+export type DrillMode =
+  | 'daily'
+  | 'chaos'
+  | 'retry'
+  | 'interview'
+  | 'debate'
+  | 'rescue'
+  | 'deep_random'
+  | 'dinner_table'
+  | 'make_boring_interesting'
+  | 'cross_domain'
+  | 'debate_mode'
+  | 'explain_like_12'
+  | 'rabbit_hole'
+  | 'challenge_day'
 export type Difficulty = 1 | 2 | 3 | 4
 export type SessionStatus = 'pending' | 'active' | 'completed' | 'abandoned'
 export type PromptCategory =
@@ -42,6 +56,11 @@ export interface Prompt {
   tags: string[]
   active: boolean
   created_at: string
+  speaking_angle?: string
+  source_label?: string | null
+  source_url?: string | null
+  topic_id?: string | null
+  topic_prompt_id?: string | null
 }
 
 export interface Session {
@@ -64,6 +83,9 @@ export interface Attempt {
   audio_url: string | null
   transcript: string | null
   duration_sec: number | null
+  topic_id?: string | null
+  topic_prompt_id?: string | null
+  source_mode?: string | null
   created_at: string
   metrics?: Metrics
   feedback?: Feedback
@@ -191,6 +213,162 @@ export interface VisualEvent {
   end_ms: number
   severity: number // 0-1
   metadata?: Record<string, unknown>
+}
+
+export interface TopicCategory {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  parent_id: string | null
+  depth: number
+  active: boolean
+  created_at: string
+}
+
+export interface Topic {
+  id: string
+  title: string
+  slug: string
+  summary: string | null
+  source_label: string | null
+  source_url: string | null
+  wikidata_id: string | null
+  difficulty: Difficulty | null
+  quality_score: number | null
+  speakability_score: number | null
+  weirdness_score: number | null
+  conversation_value_score: number | null
+  active: boolean
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export type TopicPromptVariant =
+  | 'explain'
+  | 'make_interesting'
+  | 'connect_to_modern_life'
+  | 'argue_importance'
+  | 'debate_both_sides'
+  | 'analogy'
+  | 'story'
+  | 'hot_take'
+
+export interface TopicPrompt {
+  id: string
+  topic_id: string
+  category_id: string | null
+  prompt_variant: TopicPromptVariant
+  prompt_text: string
+  context_bullets: string[]
+  speaking_angle: string | null
+  retry_angle: string | null
+  difficulty: Difficulty | null
+  source_label: string | null
+  source_url: string | null
+  active: boolean
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export interface TopicQualityScore {
+  quality_score: number
+  speakability_score: number
+  weirdness_score: number
+  conversation_value_score: number
+  accepted: boolean
+  rejection_reason?: string | null
+}
+
+export interface CuriosityFeedback {
+  id: string
+  attempt_id: string
+  topic_id: string | null
+  topic_prompt_id: string | null
+  interestingness_score: number
+  explanation_score: number
+  connection_score: number
+  analogy_score: number
+  opinion_score: number
+  example_score: number
+  curiosity_score: number
+  one_interesting_thing: string | null
+  missed_opportunity: string | null
+  stronger_reframe: string | null
+  suggested_related_topic: string | null
+  created_at: string
+}
+
+export interface UserCategoryStats {
+  id: string
+  user_id: string
+  category_id: string
+  attempts_count: number
+  avg_freeze_resilience: number | null
+  avg_interestingness: number | null
+  avg_curiosity: number | null
+  avg_difficulty: number | null
+  last_attempt_at: string | null
+  avoided_streak: number
+}
+
+export interface TopicEdge {
+  id: string
+  from_topic_id: string
+  to_topic_id: string
+  edge_type: 'similar' | 'contrast' | 'weird_link' | 'cross_domain'
+  weight: number
+  reason: string | null
+}
+
+export interface Challenge {
+  id: string
+  user_id: string
+  template_key: string
+  title: string
+  total_days: number
+  status: 'active' | 'completed' | 'paused' | 'abandoned'
+  starts_at: string
+  ends_at: string | null
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export interface ChallengeDay {
+  id: string
+  challenge_id: string
+  day_number: number
+  due_date: string
+  topic_prompt_id: string | null
+  topic_id: string | null
+  attempt_id: string | null
+  status: 'pending' | 'completed' | 'missed'
+}
+
+export interface GestureMetrics {
+  gesture_burst_count: number
+  low_visual_energy_ms: number
+  hands_not_visible_ratio: number
+}
+
+export interface GazeProxyMetrics {
+  looking_away_ratio: number
+  looking_away_ms: number
+  screen_facing_ratio: number
+}
+
+export interface ConversationalRangeSummary {
+  range_score: number
+  categories_attempted: number
+  category_breadth_score: number
+  category_balance_score: number
+  average_curiosity_score: number
+  difficulty_progression_score: number
+  weak_domain_courage_score: number
+  cross_domain_connection_score: number
+  strongest_categories: string[]
+  weakest_categories: string[]
+  most_avoided_categories: string[]
 }
 
 export interface VisualMetricsSummary {
