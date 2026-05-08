@@ -14,6 +14,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/curiosity', label: 'Curiosity' },
   { href: '/topics', label: 'Topics' },
+  { href: '/challenge', label: 'Challenge' },
   { href: '/progress', label: 'Progress' },
   { href: '/settings', label: 'Settings' },
 ]
